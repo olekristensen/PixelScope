@@ -1,9 +1,11 @@
 #include "testApp.h"
-#include <Cocoa/Cocoa.h>
+#include <Foundation/Foundation.h>
 
 extern "C" {
 #include "macGlutfix.h"
 }
+
+#include "ofxDisplayManager.h"
 
 //--------------------------------------------------------------
 void testApp::setup(){
@@ -14,48 +16,80 @@ void testApp::setup(){
     dotPositionNoiseAmount = 0.75;
     dotBrightnessFactor = 1.0;
     dotDepth = 0;
+    blurStrength = 1.0;
+    blurGain = 1.0;
     
-    imageSource = 0;
+    vector<ofVideoDevice> vidDevices = vidGrabber.listDevices();
+    for(int i=0; i < vidDevices.size(); i++){
+        ofVideoDevice device = vidDevices[i];
+        cout << device.deviceName << endl;
+        cout << device.hardwareName << endl;
+        vector<ofVideoFormat> deviceFormats = device.formats;
+        for (int j=0; j < deviceFormats.size(); j++) {
+            ofVideoFormat f = deviceFormats[j];
+            cout << " - " << f.width << "x" << f.height << endl;
+        }
+        
+    }
+    
+    imageSource = IMAGE_SOURCE_CAMERA;
     
     fogDensity = 0.0;
     
     camWidth 		= 800;	// try to grab at this size.
 	camHeight 		= 600;
-	
+
+    blur.setup(ofGetWidth(), ofGetHeight());
+    
     ofSetFrameRate(60);
     
-    //ofxFensterManager::get()->setPrimaryWindow(ofxFensterManager::get()->getWindowById(0));
-    
-    captureFenster=ofxFensterManager::get()->createFenster(ofGetScreenWidth() - 1000, ofGetScreenHeight() - 1000, 400, 300, OF_WINDOW);
-    
-    captureFensterListener = new captureWindow();
-    
-    captureFenster->addListener(captureFensterListener); //this line works because testApp does not extend ofBaseApp, but ofxFensterListener
+    ofxFensterManager::get()->setupWindow(&captureFenster);
+    captureFenster.setWindowPosition(ofGetScreenWidth() - 1000, ofGetScreenHeight() - 1000);
+    captureFenster.setWindowShape(400, 300);
     
     //start server
 	OFX_REMOTEUI_SERVER_SETUP(10000);
     
 	//expose vars to ofxRemoteUI server, AFTER SETUP!
+    
+    OFX_REMOTEUI_SERVER_SET_UPCOMING_PARAM_GROUP("Dots");
+    OFX_REMOTEUI_SERVER_SET_UPCOMING_PARAM_COLOR(ofColor::white);
 	OFX_REMOTEUI_SERVER_SHARE_PARAM(dotSpacing, 5, ofGetWidth());
 	OFX_REMOTEUI_SERVER_SHARE_PARAM(dotRadius, 0, ofGetWidth());
 	OFX_REMOTEUI_SERVER_SHARE_PARAM(dotPositionNoiseScale, 0, ofGetWidth()/5.);
 	OFX_REMOTEUI_SERVER_SHARE_PARAM(dotPositionNoiseAmount, 0, 1.0);
 	OFX_REMOTEUI_SERVER_SHARE_PARAM(dotBrightnessFactor, 0, 1.0);
-	OFX_REMOTEUI_SERVER_SHARE_PARAM(dotDepth, -1.0, 1.0);
-	OFX_REMOTEUI_SERVER_SHARE_PARAM(resetCam);
-	OFX_REMOTEUI_SERVER_SHARE_PARAM(fogDensity, 0, .01);
-	OFX_REMOTEUI_SERVER_SHARE_PARAM(imageSource, 0, 1);
+    OFX_REMOTEUI_SERVER_SET_UPCOMING_PARAM_GROUP("Blur");
+	OFX_REMOTEUI_SERVER_SHARE_PARAM(blurStrength, 0, 1.25);
+	OFX_REMOTEUI_SERVER_SHARE_PARAM(blurGain, 1.0, 10);
+//	OFX_REMOTEUI_SERVER_SHARE_PARAM(dotDepth, -1.0, 1.0);
+    OFX_REMOTEUI_SERVER_SET_UPCOMING_PARAM_GROUP("Source");
+    OFX_REMOTEUI_SERVER_SET_UPCOMING_PARAM_COLOR(ofColor::lightGray);
+    vector<string> sourceMenuItems;
+	sourceMenuItems.push_back("Camera");sourceMenuItems.push_back("Screen");
+	OFX_REMOTEUI_SERVER_SHARE_ENUM_PARAM(imageSource, IMAGE_SOURCE_CAMERA, IMAGE_SOURCE_SCREEN, sourceMenuItems);
+
+//	OFX_REMOTEUI_SERVER_SHARE_PARAM(resetCam);
+//	OFX_REMOTEUI_SERVER_SHARE_PARAM(fogDensity, 0, .01);
+    
+//	OFX_REMOTEUI_SERVER_SHARE_PARAM(imageSource, 0, 1);
+  
+    OFX_REMOTEUI_SERVER_LOAD_FROM_XML();
+    
+    OFX_REMOTEUI_SERVER_GET_INSTANCE()->setCallback(testApp::serverCallback); // (optional!)
     
     ofEnableSmoothing();
     
     cam.reset();
     
+    // Main window goes fullscreen if on secondary display
+    
     ofxDisplayList displays = ofxDisplayManager::get()->getDisplays();
     ofxDisplay* disp = displays[0];
     if(displays.size() > 1){
         disp = displays[1];
-        ofxFensterManager::get()->getWindowById(0)->move(disp->x, disp->y);
-        ofxFensterManager::get()->getWindowById(0)->setFullscreen(true);
+        ofxFensterManager::get()->getMainWindow()->setWindowPosition(disp->x, disp->y);
+        ofxFensterManager::get()->getMainWindow()->setFullscreen(true);
     }
     
     BringAppToFront();
@@ -67,20 +101,26 @@ void testApp::setup(){
 //--------------------------------------------------------------
 void testApp::update(){
     
-    
     NSAutoreleasePool * pool = [[NSAutoreleasePool alloc] init];
+    
+    blur.setScale(blurStrength);
+    blur.setBrightness((blurGain==1.0)?0.0:blurGain);
+	//blur.setRotation(ofMap(mouseY, 0, ofGetHeight(), -PI, PI));
 
     bool upload = false;
     
     int dataWidth, dataHeight;
     
-    if(imageSource == 0){
+    captureFenster.imageSource = imageSource;
+    
+    if(imageSource == IMAGE_SOURCE_CAMERA){
         if(!vidGrabber.isInitialized()) {
             vidGrabber.setVerbose(true);
             vidGrabber.setDeviceID(0);
             vidGrabber.setDesiredFrameRate(60);
             vidGrabber.initGrabber(camWidth,camHeight);
-            captureFenster->setWindowTitle("Camera Capture");
+            captureFenster.setWindowTitle("Camera Capture");
+            captureFenster.setWindowShape(camWidth/2, camHeight/2);
         }
         vidGrabber.update();
         
@@ -97,15 +137,14 @@ void testApp::update(){
         vidGrabber.close();
     }
     
-    if (imageSource == 1) {
-        if(captureFenster->getWindowTitle() != "Screen Capture"){
-            captureFenster->setWindowTitle("Screen Capture");
-        }
+    if (imageSource == IMAGE_SOURCE_SCREEN) {
         
-        dataWidth = captureFensterListener->windowRect.getWidth();
-        dataHeight = captureFensterListener->windowRect.getHeight();
+        captureFenster.setWindowTitle("Screen Capture");
         
-        data = pixelsBelowWindow(captureFensterListener->windowRect.x,captureFensterListener->windowRect.y,dataWidth,dataHeight);
+        dataWidth = captureFenster.getWidth();
+        dataHeight = captureFenster.getHeight();
+        
+        data = pixelsBelowWindow(captureFenster.getWindowPosition().x,captureFenster.getWindowPosition().y,dataWidth,dataHeight);
         
         // now, let's get the R and B data swapped, so that it's all OK:
         
@@ -128,12 +167,11 @@ void testApp::update(){
     }
     
     if (upload) {
-        if (captureFensterListener->tex.getWidth() != dataWidth || captureFensterListener->tex.getHeight() != dataHeight) {
-            
-            captureFensterListener->tex.allocate(dataWidth, dataHeight, GL_RGB);
+        if (captureFenster.tex.getWidth() != dataWidth || captureFenster.tex.getHeight() != dataHeight) {
+            captureFenster.tex.allocate(dataWidth, dataHeight, GL_RGB);
         }
         
-        if (data!= NULL) captureFensterListener->tex.loadData(data, dataWidth, dataHeight, GL_RGB);
+        if (data!= NULL) captureFenster.tex.loadData(data, dataWidth, dataHeight, GL_RGB);
         
         ofRectangle screenRect = ofGetWindowRect();
         
@@ -154,30 +192,43 @@ void testApp::update(){
         cam.reset();
         resetCam = false;
     }
-    
-    [pool drain];
 
 	float dt = 0.016666;
     OFX_REMOTEUI_SERVER_UPDATE(dt);
+    
+    [pool drain];
     
 }
 
 //--------------------------------------------------------------
 void testApp::draw(){
-    
     ofBackground(0);
+    ofSetColor(255,255);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE);
     
 	//cam.begin();
-    glFogi(GL_FOG_MODE, GL_EXP2);
-    glFogf(GL_FOG_DENSITY, fogDensity);
-    glEnable(GL_FOG);
+    
+    blur.begin();
+    ofBackground(0);
+
+//    glFogi(GL_FOG_MODE, GL_EXP2);
+//    glFogf(GL_FOG_DENSITY, fogDensity);
+//    glEnable(GL_FOG);
     for (vector<LightDot*>::iterator it = dots.begin() ; it != dots.end(); ++it) {
         //(*it)->lookAt(cam);
         (*it)->draw();
     }
+    blur.end();
 	//cam.end();
+    
+    ofSetColor(255,255);
+    ofBackground(0);
+
+    blur.draw();
+
+	//ofDrawBitmapString(ofToString((int) ofGetFrameRate()), 10, 20);
+
     
 }
 
@@ -250,7 +301,7 @@ void testApp::keyPressed(int key, ofxFenster* win){
 void testApp::keyReleased(int key, ofxFenster* win){
     
     if (key == 'f') {
-        ofxFensterManager::get()->getWindowById(0)->toggleFullscreen();
+        ofxFensterManager::get()->getMainWindow()->toggleFullscreen();
         cam.reset();
     }
     
@@ -283,7 +334,7 @@ void testApp::mouseReleased(int x, int y, int button){
 //--------------------------------------------------------------
 void testApp::windowResized(int w, int h){
     cam.reset();
-    
+    blur.setup(w, h);
 }
 
 //--------------------------------------------------------------
@@ -294,4 +345,23 @@ void testApp::gotMessage(ofMessage msg){
 //--------------------------------------------------------------
 void testApp::dragEvent(ofDragInfo dragInfo){ 
     
+}
+
+//define a callback method to get notifications of client actions
+void testApp::serverCallback(RemoteUIServerCallBackArg arg){
+    
+	switch (arg.action) {
+		case CLIENT_CONNECTED: cout << "CLIENT_CONNECTED" << endl; break;
+		case CLIENT_DISCONNECTED: cout << "CLIENT_DISCONNECTED" << endl; break;
+		case CLIENT_UPDATED_PARAM: cout << "CLIENT_UPDATED_PARAM: "<< arg.paramName << ": ";
+			arg.param.print();
+			break;
+		case CLIENT_DID_SET_PRESET: cout << "CLIENT_DID_SET_PRESET" << endl; break;
+		case CLIENT_SAVED_PRESET: cout << "CLIENT_SAVED_PRESET" << endl; break;
+		case CLIENT_DELETED_PRESET: cout << "CLIENT_DELETED_PRESET" << endl; break;
+		case CLIENT_SAVED_STATE: cout << "CLIENT_SAVED_STATE" << endl; break;
+		case CLIENT_DID_RESET_TO_XML: cout << "CLIENT_DID_RESET_TO_XML" << endl; break;
+		case CLIENT_DID_RESET_TO_DEFAULTS: cout << "CLIENT_DID_RESET_TO_DEFAULTS" << endl; break;
+		default:break;
+	}
 }
