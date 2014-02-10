@@ -16,8 +16,9 @@ void testApp::setup(){
     dotPositionNoiseAmount = 0.75;
     dotBrightnessFactor = 1.0;
     dotDepth = 0;
-    blurStrength = 1.0;
+    blurStrength = 0;
     blurGain = 1.0;
+    doScreenShot = false;
     
     vector<ofVideoDevice> vidDevices = vidGrabber.listDevices();
     for(int i=0; i < vidDevices.size(); i++){
@@ -68,6 +69,8 @@ void testApp::setup(){
     vector<string> sourceMenuItems;
 	sourceMenuItems.push_back("Camera");sourceMenuItems.push_back("Screen");
 	OFX_REMOTEUI_SERVER_SHARE_ENUM_PARAM(imageSource, IMAGE_SOURCE_CAMERA, IMAGE_SOURCE_SCREEN, sourceMenuItems);
+    OFX_REMOTEUI_SERVER_SET_UPCOMING_PARAM_GROUP("Screenshot");
+	OFX_REMOTEUI_SERVER_SHARE_PARAM(doScreenShot);
 
 //	OFX_REMOTEUI_SERVER_SHARE_PARAM(resetCam);
 //	OFX_REMOTEUI_SERVER_SHARE_PARAM(fogDensity, 0, .01);
@@ -77,6 +80,8 @@ void testApp::setup(){
     OFX_REMOTEUI_SERVER_LOAD_FROM_XML();
     
     OFX_REMOTEUI_SERVER_GET_INSTANCE()->setCallback(testApp::serverCallback); // (optional!)
+    
+    OFX_REMOTEUI_SERVER_SET_DRAWS_NOTIF(false);
     
     ofEnableSmoothing();
     
@@ -194,9 +199,17 @@ void testApp::update(){
     }
 
 	float dt = 0.016666;
+
     OFX_REMOTEUI_SERVER_UPDATE(dt);
-    
+
+    if(doScreenShot){
+        screenShot();
+    }
+    doScreenShot = false;
+    OFX_REMOTEUI_SERVER_PUSH_TO_CLIENT();
+
     [pool drain];
+    
     
 }
 
@@ -364,4 +377,32 @@ void testApp::serverCallback(RemoteUIServerCallBackArg arg){
 		case CLIENT_DID_RESET_TO_DEFAULTS: cout << "CLIENT_DID_RESET_TO_DEFAULTS" << endl; break;
 		default:break;
 	}
+}
+
+void testApp :: screenShot ()
+{
+    string filePath = "~/Desktop/";
+    string fileExt = ".png";
+	string fileName = "PixelScope\\ Shot\\ ";
+    
+    string timeStr = ofToString(ofGetYear()) + "-" + ofToString(ofGetMonth()) + "-" + ofToString(ofGetDay()) + "\\ " + ofToString(ofGetHours()) + "-" + ofToString(ofGetMinutes()) + "-" + ofToString(ofGetSeconds());
+    
+    string shPath;
+	shPath = "/usr/sbin/screencapture";
+    
+    shPath = shPath + " " + filePath + fileName + "1\\ " + timeStr + fileExt + " " + filePath + fileName + "2\\ " + timeStr + fileExt;
+	   
+	char *shPathChar;
+    shPathChar = new char[ shPath.length() + 1 ];
+	
+	strcpy( shPathChar, shPath.c_str() );
+	
+    cout << shPathChar << endl;
+    
+    system(shPathChar);
+    
+    delete shPathChar;
+	
+	//--
+    
 }

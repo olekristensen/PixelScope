@@ -81,6 +81,7 @@ class testApp : public ofBaseApp {
 	void mouseMovedEvent(ofMouseEventArgs &args);
     
     static void serverCallback(RemoteUIServerCallBackArg arg);
+    void screenShot();
 
         vector<LightDot*> dots;
     
@@ -101,6 +102,7 @@ class testApp : public ofBaseApp {
         float fogDensity;
     
         bool resetCam;
+        bool doScreenShot;
     
     imageSources imageSource;
     
