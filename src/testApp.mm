@@ -19,6 +19,8 @@ void testApp::setup(){
     blurStrength = 0;
     blurGain = 1.0;
     doScreenShot = false;
+    fullScreen = false;
+    isFullScreen = false;
     
     vector<ofVideoDevice> vidDevices = vidGrabber.listDevices();
     for(int i=0; i < vidDevices.size(); i++){
@@ -93,11 +95,13 @@ void testApp::setup(){
     ofxDisplay* disp = displays[0];
     if(displays.size() > 1){
         disp = displays[1];
-        ofxFensterManager::get()->getMainWindow()->setWindowPosition(disp->x, disp->y);
+        ofxFensterManager::get()->getMainWindow()->setWindowPosition(disp->x+10, disp->y+10);
         ofxFensterManager::get()->getMainWindow()->setFullscreen(true);
+        fullScreen = true;
+        isFullScreen= true;
     }
     
-    BringAppToFront();
+    //BringAppToFront();
     
     //    cam.enableOrtho();
     
@@ -121,7 +125,7 @@ void testApp::update(){
     if(imageSource == IMAGE_SOURCE_CAMERA){
         if(!vidGrabber.isInitialized()) {
             vidGrabber.setVerbose(true);
-            vidGrabber.setDeviceID(0);
+            vidGrabber.setDeviceID(vidGrabber.listDevices().size()-1);
             vidGrabber.setDesiredFrameRate(60);
             vidGrabber.initGrabber(camWidth,camHeight);
             captureFenster.setWindowTitle("Camera Capture");
@@ -210,7 +214,16 @@ void testApp::update(){
 
     [pool drain];
     
-    
+    if(fullScreen && !isFullScreen){
+        ofxFensterManager::get()->getMainWindow()->ofAppBaseWindow::setFullscreen(true);
+        isFullScreen=fullScreen;
+    }
+
+    if(!fullScreen && isFullScreen){
+        ofxFensterManager::get()->getMainWindow()->ofAppBaseWindow::setFullscreen(false);
+        isFullScreen=fullScreen;
+    }
+
 }
 
 //--------------------------------------------------------------
@@ -314,8 +327,15 @@ void testApp::keyPressed(int key, ofxFenster* win){
 void testApp::keyReleased(int key, ofxFenster* win){
     
     if (key == 'f') {
-        ofxFensterManager::get()->getMainWindow()->toggleFullscreen();
-        cam.reset();
+        fullScreen!=fullScreen;
+    }
+    
+}
+
+void testApp::keyReleased(int key){
+    
+    if (key == 'f') {
+        fullScreen!=fullScreen;
     }
     
 }
@@ -401,7 +421,7 @@ void testApp :: screenShot ()
     
     system(shPathChar);
     
-    delete shPathChar;
+    delete[] shPathChar;
 	
 	//--
     

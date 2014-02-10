@@ -46,7 +46,7 @@ public:
     ofRectangle videoRect;
     imageSources imageSource;
     
-    void keyReleased(int key, ofxFenster* win){
+    void keyReleased(int key){
         
         if (key == 'f') {
             ofxFensterManager::get()->getMainWindow()->toggleFullscreen();
@@ -70,6 +70,7 @@ class testApp : public ofBaseApp {
 
 	void keyPressed  (int key, ofxFenster* win);
 	void keyReleased(int key, ofxFenster* win);
+	void keyReleased(int key);
 	void mouseMoved(int x, int y );
 	void mouseMoved(int x, int y, ofxFenster* win);
 	void mouseDragged(int x, int y, int button);
@@ -103,6 +104,8 @@ class testApp : public ofBaseApp {
     
         bool resetCam;
         bool doScreenShot;
+        bool fullScreen;
+        bool isFullScreen;
     
     imageSources imageSource;
     
